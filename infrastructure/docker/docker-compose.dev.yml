@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # ─── PostgreSQL ────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: indimba-postgres
+    environment:
+      POSTGRES_USER: indimba
+      POSTGRES_PASSWORD: localdev
+      POSTGRES_DB: indimba_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U indimba"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: indimba-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Meilisearch ────────────────────────────────────
+  meilisearch:
+    image: getmeili/meilisearch:v1.8
+    container_name: indimba-meilisearch
+    environment:
+      MEILI_MASTER_KEY: localdev_key
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "7700:7700"
+    volumes:
+      - meilisearch_data:/meili_data
+
+  # ─── API Server ──────────────────────────────────────
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.api
+    container_name: indimba-api
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://indimba:localdev@postgres:5432/indimba_dev
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MEILISEARCH_HOST: http://meilisearch:7700
+      MEILISEARCH_API_KEY: localdev_key
+      JWT_ACCESS_SECRET: dev-access-secret-change-in-production-64-char-min
+      JWT_REFRESH_SECRET: dev-refresh-secret-change-in-production-64-char-min
+      FIELD_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    command: pnpm --filter api run start:dev
+
+  # ─── Worker ──────────────────────────────────────────
+  worker:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    container_name: indimba-worker
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://indimba:localdev@postgres:5432/indimba_dev
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MEILISEARCH_HOST: http://meilisearch:7700
+      MEILISEARCH_API_KEY: localdev_key
+      JWT_ACCESS_SECRET: dev-access-secret-change-in-production-64-char-min
+      JWT_REFRESH_SECRET: dev-refresh-secret-change-in-production-64-char-min
+      FIELD_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    command: pnpm --filter api run worker
+
+volumes:
+  postgres_data:
+  redis_data:
+  meilisearch_data:

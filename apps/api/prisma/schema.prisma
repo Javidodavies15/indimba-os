@@ -1,0 +1,839 @@
+// ============================================
+// INDIMBA OS — Unified Database Schema
+// PostgreSQL 16 + pgvector extension required
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// CORE: Users & Authentication
+// ============================================
+
+model User {
+  id                String   @id @default(uuid()) @db.Uuid
+  email             String?  @unique
+  phone             String?  @unique
+  username          String   @unique
+  displayName       String   @map("display_name")
+  passwordHash      String?  @map("password_hash")
+  avatarUrl         String?  @map("avatar_url")
+  role              UserRole @default(READER)
+  subscriptionTier  String?  @map("subscription_tier")
+  isVerified        Boolean  @default(false) @map("is_verified")
+  isActive          Boolean  @default(true) @map("is_active")
+  mfaEnabled        Boolean  @default(false) @map("mfa_enabled")
+  mfaSecret         String?  @map("mfa_secret")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  sessions          UserSession[]
+  articles          Article[]
+  comments          Comment[]
+  readEvents        ReadEvent[]
+  ticketPurchases   TicketPurchase[]
+  artist            MusicArtist?
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  moderationOverrides ModerationOverride[]
+  payoutChanges     PayoutDetailChange[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@map("users")
+}
+
+model UserSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  tokenHash   String   @map("token_hash")
+  deviceInfo  Json?    @map("device_info")
+  ipAddress   String?  @map("ip_address")
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+enum UserRole {
+  READER
+  ARTIST
+  EDITOR
+  ADMIN
+  SUPER_ADMIN
+  @map("user_role")
+}
+
+// ============================================
+// CONTENT: Articles & Editorial
+// ============================================
+
+model Article {
+  id            String      @id @default(uuid()) @db.Uuid
+  title         String
+  slug          String      @unique
+  excerpt       String
+  body          String
+  featuredImage Json?       @map("featured_image")
+  platform      Platform
+  category      String
+  tags          Tag[]
+  authorId      String      @map("author_id") @db.Uuid
+  status        ArticleStatus @default(DRAFT)
+  isBreaking    Boolean     @default(false) @map("is_breaking")
+  isFeatured    Boolean     @default(false) @map("is_featured")
+  viewCount     Int         @default(0) @map("view_count")
+  readingTime   Int         @default(0) @map("reading_time")
+  publishedAt   DateTime?   @map("published_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  embedding     Unsupported("vector(1536)")?
+
+  // Relations
+  author      User          @relation(fields: [authorId], references: [id])
+  comments    Comment[]
+  readEvents  ReadEvent[]
+
+  @@index([slug])
+  @@index([platform, status])
+  @@index([isBreaking, status])
+  @@index([publishedAt])
+  @@index([viewCount])
+  @@map("articles")
+}
+
+model Tag {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @unique
+  slug      String    @unique
+  articles  Article[]
+
+  @@map("tags")
+}
+
+enum Platform {
+  ENTERTAINMENT
+  SPORTS
+  MUSIC
+  EVENTS
+  PODCASTS
+  COMMUNITY
+  BUSINESS
+  LIFESTYLE
+  @map("platform")
+}
+
+enum ArticleStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  ARCHIVED
+  @map("article_status")
+}
+
+// ============================================
+// ENGAGEMENT: Comments & Moderation
+// ============================================
+
+model Comment {
+  id                String            @id @default(uuid()) @db.Uuid
+  articleId         String            @map("article_id") @db.Uuid
+  userId            String            @map("user_id") @db.Uuid
+  parentId          String?           @map("parent_id") @db.Uuid
+  body              String
+  moderationStatus  ModerationStatus  @default(PENDING) @map("moderation_status")
+  aiToxicityScore   Float?            @map("ai_toxicity_score")
+  aiCategories      String[]          @map("ai_categories")
+  aiReasoning       String?           @map("ai_reasoning")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  article   Article   @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+  overrides ModerationOverride[]
+
+  @@index([articleId, createdAt])
+  @@index([moderationStatus])
+  @@index([userId])
+  @@map("comments")
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVIEW_QUEUE
+  @map("moderation_status")
+}
+
+model ModerationOverride {
+  id            String   @id @default(uuid()) @db.Uuid
+  commentId     String   @map("comment_id") @db.Uuid
+  aiDecision    String   @map("ai_decision")
+  humanDecision String   @map("human_decision")
+  moderatorId   String   @map("moderator_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  comment   Comment @relation(fields: [commentId], references: [id])
+  moderator User    @relation(fields: [moderatorId], references: [id])
+
+  @@index([commentId])
+  @@map("moderation_overrides")
+}
+
+// ============================================
+// MUSIC: Artists, Tracks, Albums, Charts
+// ============================================
+
+model MusicArtist {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String?  @unique @map("user_id") @db.Uuid
+  stageName     String   @map("stage_name")
+  realName      String?  @map("real_name")
+  slug          String   @unique
+  bio           String?
+  hometown      String?
+  genres        String[]
+  avatarUrl     String?  @map("avatar_url")
+  coverUrl      String?  @map("cover_url")
+  socialLinks   Json?    @map("social_links")
+  payoutDetails Json?    @map("payout_details")
+  isVerified    Boolean  @default(false) @map("is_verified")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user      User?         @relation(fields: [userId], references: [id])
+  tracks    MusicTrack[]
+  albums    MusicAlbum[]
+  agreements ArtistAgreement[]
+  royaltyEarnings RoyaltyEarning[]
+  cityAffinities ArtistCityAffinity[]
+  payoutChanges PayoutDetailChange[]
+
+  @@index([slug])
+  @@map("music_artists")
+}
+
+model MusicTrack {
+  id                String   @id @default(uuid()) @db.Uuid
+  artistId          String   @map("artist_id") @db.Uuid
+  title             String
+  slug              String   @unique
+  isrcCode          String?  @unique @map("isrc_code")
+  albumId           String?  @map("album_id") @db.Uuid
+  duration          Int?
+  audioUrl          String?  @map("audio_url")
+  coverUrl          String?  @map("cover_url")
+  genres            String[]
+  isExplicit        Boolean  @default(false) @map("is_explicit")
+  isPublished       Boolean  @default(false) @map("is_published")
+  isCopyrighted     Boolean  @default(false) @map("is_copyrighted")
+  copyrightHolder   String?  @map("copyright_holder")
+  licenseAgreementId String? @map("license_agreement_id")
+  spotifyId         String?  @map("spotify_id")
+  youtubeId         String?  @map("youtube_id")
+  boomplayId        String?  @map("boomplay_id")
+  zambiaStreamsTotal Int     @default(0) @map("zambia_streams_total")
+  zambiaStreamsWeekly Int    @default(0) @map("zambia_streams_weekly")
+  distributionStatus String?  @map("distribution_status")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  embedding         Unsupported("vector(1536)")?
+
+  // Relations
+  artist          MusicArtist         @relation(fields: [artistId], references: [id])
+  album           MusicAlbum?         @relation(fields: [albumId], references: [id])
+  chartEntries    ChartsWeekly[]
+  rawStreamData   ChartsDataRaw[]
+  playEvents      PlayEvent[]
+  licensingStatus TrackLicensingStatus?
+  royaltyEarnings RoyaltyEarning[]
+
+  @@index([artistId])
+  @@index([slug])
+  @@index([isPublished])
+  @@index([isrcCode])
+  @@map("music_tracks")
+}
+
+model MusicAlbum {
+  id          String   @id @default(uuid()) @db.Uuid
+  artistId    String   @map("artist_id") @db.Uuid
+  title       String
+  slug        String   @unique
+  coverUrl    String?  @map("cover_url")
+  releaseDate DateTime? @map("release_date")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  artist  MusicArtist  @relation(fields: [artistId], references: [id])
+  tracks  MusicTrack[]
+
+  @@map("music_albums")
+}
+
+model ArtistAgreement {
+  id              String   @id @default(uuid()) @db.Uuid
+  artistId        String   @map("artist_id") @db.Uuid
+  agreementType   String   @map("agreement_type")
+  status          AgreementStatus @default(PENDING)
+  terms           Json
+  signatureMethod String   @map("signature_method")
+  signatureToken  String?  @map("signature_token")
+  signedAt        DateTime? @map("signed_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  artist MusicArtist @relation(fields: [artistId], references: [id])
+
+  @@index([artistId, status])
+  @@map("artist_agreements")
+}
+
+enum AgreementStatus {
+  PENDING
+  SIGNED
+  EXPIRED
+  CANCELLED
+  @map("agreement_status")
+}
+
+model TrackLicensingStatus {
+  id            String   @id @default(uuid()) @db.Uuid
+  trackId       String   @unique @map("track_id") @db.Uuid
+  agreementId   String?  @map("agreement_id") @db.Uuid
+  status        LicensingStatus @default(PENDING)
+  notes         String?
+  lastReviewed  DateTime? @map("last_reviewed")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  track MusicTrack @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@map("track_licensing_status")
+}
+
+enum LicensingStatus {
+  PENDING
+  CLEARED
+  DISPUTED
+  ARCHIVED
+  @map("licensing_status")
+}
+
+// ============================================
+// CHARTS: Data Engine
+// ============================================
+
+model ChartsDataRaw {
+  id          String   @id @default(uuid()) @db.Uuid
+  trackId     String   @map("track_id") @db.Uuid
+  source      String   // spotify, youtube, boomplay, indimba
+  countryCode String   @map("country_code") @default("ZM")
+  streamCount BigInt   @map("stream_count")
+  date        DateTime @db.Date
+  fetchedAt   DateTime @default(now()) @map("fetched_at")
+
+  track MusicTrack @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, source, countryCode, date])
+  @@index([trackId, date])
+  @@index([source, countryCode, date])
+  @@map("charts_data_raw")
+}
+
+model ChartsWeekly {
+  id              String   @id @default(uuid()) @db.Uuid
+  trackId         String   @map("track_id") @db.Uuid
+  chartType       String   @map("chart_type") @default("overall")
+  countryCode     String   @map("country_code") @default("ZM")
+  weekStart       DateTime @map("week_start") @db.Date
+  position        Int
+  previousPosition Int?    @map("previous_position")
+  peakPosition    Int      @map("peak_position")
+  weeksOnChart    Int      @map("weeks_on_chart")
+  totalStreams    BigInt   @map("total_streams")
+  streamBreakdown Json?    @map("stream_breakdown")
+  weightedScore   Float    @map("weighted_score")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  track MusicTrack @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, chartType, countryCode, weekStart])
+  @@index([chartType, countryCode, weekStart, position])
+  @@map("charts_weekly")
+}
+
+model ChartsCityData {
+  id          String   @id @default(uuid()) @db.Uuid
+  artistId    String   @map("artist_id") @db.Uuid
+  city        String
+  streamCount BigInt   @map("stream_count")
+  weekStart   DateTime @map("week_start") @db.Date
+
+  @@unique([artistId, city, weekStart])
+  @@index([artistId, city])
+  @@map("charts_city_data")
+}
+
+model ArtistCityAffinity {
+  id              String   @id @default(uuid()) @db.Uuid
+  artistId        String   @map("artist_id") @db.Uuid
+  city            String
+  affinityScore   Float    @map("affinity_score")
+  totalStreams    BigInt   @map("total_streams")
+  lastUpdated     DateTime @updatedAt @map("last_updated")
+
+  artist MusicArtist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@unique([artistId, city])
+  @@index([artistId, affinityScore])
+  @@map("artist_city_affinity")
+}
+
+model PlayEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  trackId   String   @map("track_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  playedAt  DateTime @default(now()) @map("played_at")
+  duration  Int?     // seconds listened
+  source    String   @default("indimba") // indimba, spotify_embed, etc.
+
+  track MusicTrack @relation(fields: [trackId], references: [id])
+
+  @@index([trackId, playedAt])
+  @@index([userId, playedAt])
+  @@map("play_events")
+}
+
+// ============================================
+// SPORTS: Matches, Teams, Leagues
+// ============================================
+
+model FootballLeague {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String   @unique
+  country     String   @default("Zambia")
+  logoUrl     String?  @map("logo_url")
+  season      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  matches FootballMatch[]
+  teams   FootballTeam[]
+
+  @@map("football_leagues")
+}
+
+model FootballTeam {
+  id          String   @id @default(uuid()) @db.Uuid
+  leagueId    String?  @map("league_id") @db.Uuid
+  name        String
+  shortName   String   @map("short_name")
+  slug        String   @unique
+  crestUrl    String?  @map("crest_url")
+  city        String?
+  founded     Int?
+  stadium     String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  league        FootballLeague? @relation(fields: [leagueId], references: [id])
+  homeMatches   FootballMatch[] @relation("HomeTeam")
+  awayMatches   FootballMatch[] @relation("AwayTeam")
+
+  @@index([leagueId])
+  @@map("football_teams")
+}
+
+model FootballMatch {
+  id          String      @id @default(uuid()) @db.Uuid
+  leagueId    String      @map("league_id") @db.Uuid
+  homeTeamId  String      @map("home_team_id") @db.Uuid
+  awayTeamId  String      @map("away_team_id") @db.Uuid
+  homeScore   Int         @default(0) @map("home_score")
+  awayScore   Int         @default(0) @map("away_score")
+  minute      Int         @default(0)
+  status      MatchStatus @default(SCHEDULED)
+  kickoffAt   DateTime    @map("kickoff_at")
+  venue       String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  league      FootballLeague @relation(fields: [leagueId], references: [id])
+  homeTeam    FootballTeam   @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam    FootballTeam   @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  events      MatchEvent[]
+
+  @@index([status, kickoffAt])
+  @@index([leagueId, kickoffAt])
+  @@map("football_matches")
+}
+
+model MatchEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  matchId     String   @map("match_id") @db.Uuid
+  type        MatchEventType
+  minute      Int
+  playerName  String?  @map("player_name")
+  detail      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  match FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, minute])
+  @@map("match_events")
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  HALFTIME
+  FINISHED
+  POSTPONED
+  CANCELLED
+  @map("match_status")
+}
+
+enum MatchEventType {
+  GOAL
+  OWN_GOAL
+  YELLOW_CARD
+  RED_CARD
+  SUBSTITUTION
+  PENALTY
+  @map("match_event_type")
+}
+
+// ============================================
+// EVENTS: Ticketing
+// ============================================
+
+model Event {
+  id            String   @id @default(uuid()) @db.Uuid
+  title         String
+  slug          String   @unique
+  description   String?
+  venue         Json
+  startsAt      DateTime @map("starts_at")
+  endsAt        DateTime? @map("ends_at")
+  status        EventStatus @default(DRAFT)
+  coverUrl      String?  @map("cover_url")
+  promoterId    String?  @map("promoter_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  ticketTiers   TicketTier[]
+  purchases     TicketPurchase[]
+
+  @@index([status, startsAt])
+  @@map("events")
+}
+
+model TicketTier {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventId     String   @map("event_id") @db.Uuid
+  name        String
+  price       Int      // in ZMW cents (K100 = 10000)
+  capacity    Int
+  sold        Int      @default(0)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  event      Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  purchases  TicketPurchase[]
+
+  @@index([eventId])
+  @@map("ticket_tiers")
+}
+
+model TicketPurchase {
+  id              String        @id @default(uuid()) @db.Uuid
+  eventId         String        @map("event_id") @db.Uuid
+  tierId          String        @map("tier_id") @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
+  quantity        Int
+  totalAmount     Int           @map("total_amount")
+  paymentStatus   PaymentStatus @default(PENDING) @map("payment_status")
+  paymentMethod   String?       @map("payment_method")
+  paymentRef      String?       @map("payment_ref")
+  qrCode          String?       @map("qr_code")
+  checkedIn       Boolean       @default(false) @map("checked_in")
+  checkedInAt     DateTime?     @map("checked_in_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  event   Event      @relation(fields: [eventId], references: [id])
+  tier    TicketTier @relation(fields: [tierId], references: [id])
+  user    User       @relation(fields: [userId], references: [id])
+
+  @@index([eventId, paymentStatus])
+  @@index([userId])
+  @@map("ticket_purchases")
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  SOLD_OUT
+  CANCELLED
+  COMPLETED
+  @map("event_status")
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+  @map("payment_status")
+}
+
+// ============================================
+// PODCASTS
+// ============================================
+
+model Podcast {
+  id            String   @id @default(uuid()) @db.Uuid
+  title         String
+  slug          String   @unique
+  description   String?
+  coverUrl      String?  @map("cover_url")
+  category      String
+  language      String   @default("en")
+  isExplicit    Boolean  @default(false) @map("is_explicit")
+  rssFeedUrl    String?  @map("rss_feed_url")
+  status        PodcastStatus @default(DRAFT)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  episodes PodcastEpisode[]
+
+  @@map("podcasts")
+}
+
+model PodcastEpisode {
+  id            String   @id @default(uuid()) @db.Uuid
+  podcastId     String   @map("podcast_id") @db.Uuid
+  title         String
+  slug          String
+  description   String?
+  audioUrl      String   @map("audio_url")
+  coverUrl      String?  @map("cover_url")
+  duration      Int?     // seconds
+  transcript    String?  @db.Text
+  aiSummary     String?  @map("ai_summary") @db.Text
+  chapters      Json?
+  status        EpisodeStatus @default(DRAFT)
+  publishedAt   DateTime? @map("published_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  podcast Podcast @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+
+  @@unique([podcastId, slug])
+  @@index([podcastId, status, publishedAt])
+  @@map("podcast_episodes")
+}
+
+enum PodcastStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  @map("podcast_status")
+}
+
+enum EpisodeStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  @map("episode_status")
+}
+
+// ============================================
+// ROYALTIES & PAYMENTS
+// ============================================
+
+model RoyaltyEarning {
+  id              String   @id @default(uuid()) @db.Uuid
+  artistId        String   @map("artist_id") @db.Uuid
+  trackId         String   @map("track_id") @db.Uuid
+  periodStart     DateTime @map("period_start")
+  periodEnd       DateTime @map("period_end")
+  platform        String
+  streams         BigInt
+  grossEarnings   Decimal  @map("gross_earnings") @db.Decimal(12, 4)
+  indimbaCut      Decimal  @map("indimba_cut") @db.Decimal(12, 4)
+  artistEarnings  Decimal  @map("artist_earnings") @db.Decimal(12, 4)
+  currency        String   @default("USD")
+  payoutStatus    PayoutStatus @default(PENDING) @map("payout_status")
+  paidAt          DateTime? @map("paid_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  artist  MusicArtist  @relation(fields: [artistId], references: [id])
+  track   MusicTrack   @relation(fields: [trackId], references: [id])
+
+  @@index([artistId, payoutStatus])
+  @@index([trackId, periodStart])
+  @@map("royalty_earnings")
+}
+
+model PayoutDetailChange {
+  id            String   @id @default(uuid()) @db.Uuid
+  artistId      String   @map("artist_id") @db.Uuid
+  oldDetails    Json?    @map("old_details")
+  newDetails    Json     @map("new_details")
+  requestedBy   String   @map("requested_by") @db.Uuid
+  status        PayoutChangeStatus @default(PENDING)
+  effectiveAt   DateTime @map("effective_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  artist    MusicArtist @relation(fields: [artistId], references: [id])
+  requester User        @relation(fields: [requestedBy], references: [id])
+
+  @@index([artistId, status])
+  @@map("payout_detail_changes")
+}
+
+enum PayoutStatus {
+  PENDING
+  READY
+  PAID
+  FAILED
+  @map("payout_status")
+}
+
+enum PayoutChangeStatus {
+  PENDING
+  APPLIED
+  CANCELLED
+  @map("payout_change_status")
+}
+
+// ============================================
+// ANALYTICS & PERSONALIZATION
+// ============================================
+
+model ReadEvent {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  articleId       String   @map("article_id") @db.Uuid
+  readAt          DateTime @default(now()) @map("read_at")
+  durationSeconds Int?     @map("duration_seconds")
+
+  user    User    @relation(fields: [userId], references: [id])
+  article Article @relation(fields: [articleId], references: [id])
+
+  @@index([userId, readAt])
+  @@index([articleId])
+  @@map("read_events")
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  type      String
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean  @default(false) @map("is_read")
+  sentAt    DateTime @default(now()) @map("sent_at")
+  readAt    DateTime? @map("read_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, sentAt])
+  @@map("notifications")
+}
+
+// ============================================
+// SECURITY: Audit & Logging
+// ============================================
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  action      String
+  severity    String   @default("normal")
+  userId      String   @map("user_id") @db.Uuid
+  targetType  String?  @map("target_type")
+  targetId    String?  @map("target_id") @db.Uuid
+  ipAddress   String?  @map("ip_address")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([targetType, targetId])
+  @@index([severity, createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================
+// BUSINESS: Store & Listings
+// ============================================
+
+model BusinessListing {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String   @unique
+  category    String
+  description String?
+  contact     Json?
+  location    Json?
+  images      String[]
+  tier        BusinessTier @default(FREE)
+  isVerified  Boolean  @default(false) @map("is_verified")
+  status      ListingStatus @default(PENDING)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([category, tier, status])
+  @@map("business_listings")
+}
+
+enum BusinessTier {
+  FREE
+  STANDARD
+  PREMIUM
+  ENTERPRISE
+  @map("business_tier")
+}
+
+enum ListingStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  @map("listing_status")
+}
+
+model StoreProduct {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String   @unique
+  description String?
+  price       Int      // ZMW cents
+  images      String[]
+  category    String
+  inventory   Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([category, isActive])
+  @@map("store_products")
+}

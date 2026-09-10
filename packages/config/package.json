@@ -1,0 +1,15 @@
+{
+  "name": "@indimba/config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "files": [
+    "eslint",
+    "tailwind",
+    "typescript"
+  ],
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}

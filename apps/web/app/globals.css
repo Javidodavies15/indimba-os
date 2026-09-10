@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-red-900: #7B0019;
+    --color-red-700: #A50D25;
+    --color-red-500: #C8102E;
+    --color-red-300: #F04060;
+    --color-red-100: #FFE0E5;
+
+    --color-gold-900: #6B5200;
+    --color-gold-700: #B8960C;
+    --color-gold-500: #FFD700;
+    --color-gold-300: #FFE866;
+    --color-gold-100: #FFFBE0;
+
+    --color-black: #050505;
+    --color-surface-900: #0D0D0D;
+    --color-surface-800: #141414;
+    --color-surface-700: #1E1E1E;
+    --color-surface-600: #262626;
+    --color-surface-500: #333333;
+    --color-surface-400: #4B5563;
+    --color-surface-300: #6B7280;
+    --color-surface-200: #9CA3AF;
+    --color-surface-100: #E5E7EB;
+    --color-white: #F5F5F5;
+
+    --color-success: #059669;
+    --color-warning: #D97706;
+    --color-error: #DC2626;
+    --color-info: #0891B2;
+
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-default: rgba(255, 255, 255, 0.10);
+    --border-strong: rgba(255, 255, 255, 0.18);
+    --border-gold: rgba(255, 215, 0, 0.25);
+    --border-red: rgba(200, 16, 46, 0.30);
+
+    --font-display: 'Bebas Neue', 'Impact', sans-serif;
+    --font-heading: var(--font-inter), 'Inter', 'Helvetica Neue', sans-serif;
+    --font-body: var(--font-inter), 'Inter', 'Helvetica Neue', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  [data-theme="light"] {
+    --color-surface-900: #FFFFFF;
+    --color-surface-800: #F8F8F8;
+    --color-surface-700: #F0F0F0;
+    --color-surface-600: #E8E8E8;
+    --color-surface-500: #D1D5DB;
+    --color-surface-400: #9CA3AF;
+    --color-surface-300: #6B7280;
+    --color-surface-200: #374151;
+    --color-surface-100: #111827;
+    --border-subtle: rgba(0, 0, 0, 0.06);
+    --border-default: rgba(0, 0, 0, 0.10);
+    --border-strong: rgba(0, 0, 0, 0.18);
+  }
+
+  * {
+    @apply border-[rgba(255,255,255,0.1)];
+  }
+
+  body {
+    @apply bg-surface-900 text-white antialiased;
+    font-family: var(--font-body);
+  }
+
+  ::selection {
+    background-color: rgba(200, 16, 46, 0.3);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-surface-800);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-surface-500);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-surface-400);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
