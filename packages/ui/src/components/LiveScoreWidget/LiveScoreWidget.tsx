@@ -29,7 +29,7 @@ export function LiveScoreWidget() {
       setMatches(prev => prev.map(m => m.id === update.id ? update : m));
     });
 
-    socket?.on('score:goal', (event) => {
+    socket?.on('score:goal', (event: { matchId: string }) => {
       setGoalFlash(event.matchId);
       setTimeout(() => setGoalFlash(null), 3000);
     });

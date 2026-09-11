@@ -4,7 +4,9 @@
     "paths": {
       "@/*": ["./*"],
       "@indimba/ui/*": ["../../packages/ui/src/*"],
-      "@indimba/auth/*": ["../../packages/auth/src/*"]
+      "@indimba/auth/*": ["../../packages/auth/src/*"],
+      "@indimba/mock-data": ["../../packages/mock-data/src/index.ts"],
+      "@indimba/mock-data/*": ["../../packages/mock-data/src/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

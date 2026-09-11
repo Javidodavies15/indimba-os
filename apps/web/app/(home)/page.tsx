@@ -1,37 +1,21 @@
-import { Suspense } from 'react';
 import { ArticleCard } from '@indimba/ui/ArticleCard';
 import Link from 'next/link';
 import { ArrowRight, Music, Trophy, Radio, Calendar } from 'lucide-react';
-
-async function getFeaturedArticles() {
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/articles?is_featured=true&limit=6`, {
-      next: { revalidate: 120 }
-    });
-    if (!res.ok) return { articles: [] };
-    return res.json();
-  } catch {
-    return { articles: [] };
-  }
-}
-
-async function getLatestArticles() {
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/articles?status=published&limit=12`, {
-      next: { revalidate: 60 }
-    });
-    if (!res.ok) return { articles: [] };
-    return res.json();
-  } catch {
-    return { articles: [] };
-  }
-}
+import { articlesStore } from '@indimba/mock-data';
 
 export default async function HomePage() {
-  const [featured, latest] = await Promise.all([
-    getFeaturedArticles(),
-    getLatestArticles(),
-  ]);
+  const published = articlesStore.list((a) => a.status === 'published');
+  const featured = {
+    articles: published
+      .filter((a) => a.isFeatured)
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .slice(0, 6),
+  };
+  const latest = {
+    articles: [...published]
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .slice(0, 12),
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8">

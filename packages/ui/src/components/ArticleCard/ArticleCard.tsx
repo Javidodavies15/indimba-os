@@ -12,7 +12,7 @@ interface ArticleCardProps {
     platform: string;
     category: string;
     author: { displayName: string; avatarUrl?: string };
-    publishedAt: Date;
+    publishedAt: Date | string;
     viewCount: number;
     readingTime: number;
     isBreaking?: boolean;
@@ -66,7 +66,7 @@ export function ArticleCard({
                             text-white/60">
               <span>{article.author.displayName}</span>
               <span>·</span>
-              <span>{formatDistanceToNow(article.publishedAt)} ago</span>
+              <span>{formatDistanceToNow(new Date(article.publishedAt))} ago</span>
               <span>·</span>
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3" />
@@ -103,7 +103,7 @@ export function ArticleCard({
               {article.title}
             </h3>
             <p className="text-xs text-surface-300 mt-1">
-              {formatDistanceToNow(article.publishedAt)} ago
+              {formatDistanceToNow(new Date(article.publishedAt))} ago
             </p>
           </div>
         </article>
@@ -216,7 +216,7 @@ export function ArticleCard({
               </span>
             </div>
             <span className="text-xs text-surface-300">
-              {formatDistanceToNow(article.publishedAt)} ago
+              {formatDistanceToNow(new Date(article.publishedAt))} ago
             </span>
           </div>
         </div>

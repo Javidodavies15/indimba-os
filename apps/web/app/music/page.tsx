@@ -1,31 +1,7 @@
-import { Suspense } from 'react';
 import { ChartsTable } from '@indimba/ui/ChartsTable';
 import { ArticleCard } from '@indimba/ui/ArticleCard';
 import Link from 'next/link';
-
-async function getWeeklyCharts() {
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/music/charts?limit=10`, {
-      next: { revalidate: 300 }
-    });
-    if (!res.ok) return { entries: [], weekLabel: 'This Week' };
-    return res.json();
-  } catch {
-    return { entries: [], weekLabel: 'This Week' };
-  }
-}
-
-async function getMusicArticles() {
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/articles?platform=music&limit=6`, {
-      next: { revalidate: 120 }
-    });
-    if (!res.ok) return { articles: [] };
-    return res.json();
-  } catch {
-    return { articles: [] };
-  }
-}
+import { articlesStore, getChartEntries } from '@indimba/mock-data';
 
 export const metadata = {
   title: "Indimba Music — Zambia's Charts & Artists",
@@ -33,10 +9,13 @@ export const metadata = {
 };
 
 export default async function MusicHomePage() {
-  const [charts, articles] = await Promise.all([
-    getWeeklyCharts(),
-    getMusicArticles(),
-  ]);
+  const charts = getChartEntries(10);
+  const articles = {
+    articles: articlesStore
+      .list((a) => a.status === 'published' && a.platform === 'music')
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .slice(0, 6),
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8">

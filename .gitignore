@@ -39,6 +39,16 @@ coverage/
 playwright-report/
 test-results/
 
+# Mock data store (local dev only)
+.mock-db.json
+
+# TypeScript incremental build cache / generated env types
+*.tsbuildinfo
+next-env.d.ts
+
+# Claude Code local session state
+.claude/
+
 # Misc
 *.pem
 .vercel

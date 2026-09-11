@@ -5,5 +5,12 @@ export { BreakingNewsTicker } from './components/BreakingNewsTicker/BreakingNews
 export { PodcastPlayer } from './components/PodcastPlayer/PodcastPlayer';
 export { ChartsTable } from './components/ChartsTable/ChartsTable';
 export { SmartPlayer } from './components/SmartPlayer/SmartPlayer';
+export { MatchCard } from './components/MatchCard/MatchCard';
+export { StandingsTable } from './components/StandingsTable/StandingsTable';
+export { EventCard } from './components/EventCard/EventCard';
+export { PodcastCard } from './components/PodcastCard/PodcastCard';
+export { ProductCard } from './components/ProductCard/ProductCard';
+export { ListingCard } from './components/ListingCard/ListingCard';
+export { StatTile } from './components/StatTile/StatTile';
 export * from './utils/cn';
 export * from './utils/a11y';
